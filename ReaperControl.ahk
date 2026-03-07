@@ -7,7 +7,7 @@ BaseCCs := [90, 100, 110]
 Codes := [347, 57, 348, 336, 284, 2, 7, 12, 327, 55]
 
 global hMidiOut := 0
-global ActiveGroup := 1
+global ActiveGroup := 2
 global KeyStates := {}
 
 MidiID := GetMidiOutId(TargetPortName)
@@ -46,7 +46,7 @@ ShiftGroup(State) {
     global ActiveGroup
     if (State == 1)
         return
-    ActiveGroup := (ActiveGroup == 3) ? 1 : ActiveGroup + 1
+    ActiveGroup := (ActiveGroup == 2) ? 1 : ActiveGroup + 1
     UpdateStatus()
 }
 
