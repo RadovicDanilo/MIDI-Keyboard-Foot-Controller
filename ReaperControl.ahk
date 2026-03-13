@@ -1,19 +1,22 @@
 ﻿#Persistent
 #SingleInstance Force
+#NoEnv
+SetBatchLines, -1
+Process, Priority,, High
 #Include Lib\AutoHotInterception.ahk
 
 ; --- Configuration ---
 TargetPortName := "LoopMIDI Port"
-BaseStartCC    := 90
-NumKeys        := 10
-TotalBanks     := 2
-Codes          := [347, 57, 348, 336, 284, 2, 7, 12, 327, 55]
+BaseStartCC := 90
+NumKeys := 10
+TotalBanks := 2
+Codes := [347, 57, 348, 336, 284, 2, 7, 12, 327, 55]
 
 ; --- Globals ---
-global hMidiOut     := 0
-global ActiveBank   := 1
-global IsLatchMode  := true
-global LatchStates  := {}
+global hMidiOut := 0
+global ActiveBank := 1
+global IsLatchMode := true
+global LatchStates := {}
 global PhysicalKeys := {}
 
 ; --- Initialization ---
@@ -32,8 +35,8 @@ Gui, Add, Text, vModeText cWhite Center w250 h250 x0 y0, % ActiveBank
 ; Key Subscriptions
 Loop, 5 {
     devID := A_Index + 5
-    AHI.SubscribeKey(devID, 61, true, Func("ShiftGroup"))  ; F3
-    AHI.SubscribeKey(devID, 65, true, Func("ToggleMode"))  ; F7
+    AHI.SubscribeKey(devID, 61, true, Func("ShiftGroup")) ; F3
+    AHI.SubscribeKey(devID, 65, true, Func("ToggleMode")) ; F7
     AHI.SubscribeKey(devID, 87, true, Func("GlobalReset")) ; F11
     for i, code in Codes
         AHI.SubscribeKey(devID, code, true, Func("SendMidi").Bind(i))
@@ -53,44 +56,54 @@ MidiMsg(cc, val) {
 
 SendMidi(idx, state) {
     global ActiveBank, LatchStates, BaseStartCC, NumKeys, IsLatchMode, PhysicalKeys
-    
-    if (state = PhysicalKeys["K" idx]) return
+
+    if (state = PhysicalKeys["K" idx]) 
+        return
+
     PhysicalKeys["K" idx] := state
 
     cc := BaseStartCC + ((ActiveBank - 1) * NumKeys) + (idx - 1)
 
     if (IsLatchMode) 
     {
-        if (state = 0) return
-        val := LatchStates[cc] := (LatchStates[cc] = 127) ? 0 : 127
+        if (state = 0) 
+            return
+
+        val := LatchStates[cc] := LatchStates[cc] ? 0 : 127
     } 
     else 
     {
         val := (state = 1) ? 127 : 0
     }
-    
+
     MidiMsg(cc, val)
 }
 
 ShiftGroup(state) {
     global ActiveBank, TotalBanks
-    if (state != 0) return
+
+    if (state != 0) 
+        return
 
     ActiveBank := (ActiveBank >= TotalBanks) ? 1 : ActiveBank + 1
-    UpdateStatus(ActiveBank)
+    ShowGui(ActiveBank)
 }
 
 ToggleMode(state) {
     global IsLatchMode
-    if (state != 0) return
+
+    if (state != 0) 
+        return
 
     IsLatchMode := !IsLatchMode
-    UpdateStatus(IsLatchMode ? "L" : "M")
+    ShowGui(IsLatchMode ? "L" : "M")
 }
 
 GlobalReset(state) {
     global LatchStates, BaseStartCC, NumKeys, TotalBanks
-    if (state != 0) return
+
+    if (state != 0) 
+        return
 
     Loop, %TotalBanks% {
         bankOffset := (A_Index - 1) * NumKeys
@@ -100,10 +113,10 @@ GlobalReset(state) {
             MidiMsg(cc, 0)
         }
     }
-    UpdateStatus("R")
+    ShowGui("R")
 }
 
-UpdateStatus(val) {
+ShowGui(val) {
     GuiControl,, ModeText, % val
     Gui, Show, xCenter yCenter w250 h250 NoActivate
     SetTimer, RemoveOSD, -250
@@ -124,10 +137,10 @@ GetMidiOutId(name) {
                 return uID
         }
     }
-    return -1
+return -1
 }
 
 OnExit:
-if (hMidiOut) 
-    DllCall("winmm\midiOutClose", "Ptr", hMidiOut)
+    if (hMidiOut) 
+        DllCall("winmm\midiOutClose", "Ptr", hMidiOut)
 ExitApp
