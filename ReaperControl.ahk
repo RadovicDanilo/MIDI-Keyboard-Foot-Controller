@@ -6,23 +6,23 @@ Process, Priority,, High
 #Include Lib\AutoHotInterception.ahk
 
 ; --- Configuration ---
-TargetPortName := "LoopMIDI Port"
-BaseStartCC := 90
-NumKeys := 10
-TotalBanks := 2
-Codes := [347, 57, 348, 336, 284, 2, 7, 12, 327, 55]
+targetPort := "LoopMIDI Port"
+baseCC := 90
+keysPerBank := 10
+totalBanks := 2
+keyCodes := [347, 57, 348, 336, 284, 2, 7, 12, 327, 55]
 
 ; --- Globals ---
-global hMidiOut := 0
-global ActiveBank := 1
-global IsLatchMode := true
-global LatchStates := {}
-global PhysicalKeys := {}
+global midiOutHandle := 0
+global activeBank := 1
+global latchModeEnabled := true
+global latchStates := {}
+global physicalKeyStates := {}
 
 ; --- Initialization ---
-MidiID := GetMidiOutId(TargetPortName)
-if (MidiID != -1)
-    DllCall("winmm\midiOutOpen", "Ptr*", hMidiOut, "UInt", MidiID, "Ptr", 0, "Ptr", 0, "UInt", 0)
+midiDeviceId := getMidiOutId(targetPort)
+if (midiDeviceId != -1)
+    DllCall("winmm\midiOutOpen", "Ptr*", midiOutHandle, "UInt", midiDeviceId, "Ptr", 0, "Ptr", 0, "UInt", 0)
 
 AHI := new AutoHotInterception()
 
@@ -30,115 +30,115 @@ AHI := new AutoHotInterception()
 Gui, +AlwaysOnTop -Caption +LastFound +Owner +E0x20
 Gui, Color, 000000
 Gui, Font, s150 q5, Segoe UI Semibold
-Gui, Add, Text, vModeText cWhite Center w250 h250 x0 y0, % ActiveBank
+Gui, Add, Text, vOsdText cWhite Center w250 h250 x0 y0, % activeBank
 
 ; Key Subscriptions
 Loop, 5 {
-    devID := A_Index + 5
-    AHI.SubscribeKey(devID, 61, true, Func("ShiftGroup")) ; F3
-    AHI.SubscribeKey(devID, 65, true, Func("ToggleMode")) ; F7
-    AHI.SubscribeKey(devID, 87, true, Func("ResetCurrentBankLatchState")) ; F11
-    for i, code in Codes
-        AHI.SubscribeKey(devID, code, true, Func("SendMidi").Bind(i))
+    deviceId := A_Index + 5
+    AHI.SubscribeKey(deviceId, 61, true, Func("cycleBank")) ; F1
+    AHI.SubscribeKey(deviceId, 65, true, Func("toggleLatchMode")) ; F2
+    AHI.SubscribeKey(deviceId, 87, true, Func("resetBankLatchStates")) ; F3
+    for keyIndex, code in keyCodes
+        AHI.SubscribeKey(deviceId, code, true, Func("handleKeyEvent").Bind(keyIndex))
 }
 Return
 
 ; --- Functions ---
 
-MidiMsg(cc, val) {
-    global hMidiOut
-    if (hMidiOut)
+sendMidiMessage(cc, val) {
+    global midiOutHandle
+    if (midiOutHandle)
     {
-        msg := 0xB0 | (cc << 8) | (val << 16)
-        DllCall("winmm\midiOutShortMsg", "Ptr", hMidiOut, "UInt", msg)
+        message := 0xB0 | (cc << 8) | (val << 16)
+        DllCall("winmm\midiOutShortMsg", "Ptr", midiOutHandle, "UInt", message)
     }
 }
 
-SendMidi(idx, state) {
-    global ActiveBank, LatchStates, BaseStartCC, NumKeys, IsLatchMode, PhysicalKeys
+handleKeyEvent(keyIndex, keyState) {
+    global activeBank, latchStates, baseCC, keysPerBank, latchModeEnabled, physicalKeyStates
 
-    if (state = PhysicalKeys["K" idx]) 
+    if (keyState = physicalKeyStates["K" keyIndex])
         return
 
-    PhysicalKeys["K" idx] := state
+    physicalKeyStates["K" keyIndex] := keyState
 
-    cc := BaseStartCC + ((ActiveBank - 1) * NumKeys) + (idx - 1)
+    controlChange := baseCC + ((activeBank - 1) * keysPerBank) + (keyIndex - 1)
 
-    if (IsLatchMode) 
+    if (latchModeEnabled)
     {
-        if (state = 0) 
+        if (keyState = 0)
             return
 
-        val := LatchStates[cc] := LatchStates[cc] ? 0 : 127
-    } 
-    else 
+        value := latchStates[controlChange] := latchStates[controlChange] ? 0 : 127
+    }
+    else
     {
-        val := (state = 1) ? 127 : 0
+        value := (keyState = 1) ? 127 : 0
     }
 
-    MidiMsg(cc, val)
+    sendMidiMessage(controlChange, value)
 }
 
-ShiftGroup(state) {
-    global ActiveBank, TotalBanks
+cycleBank(state) {
+    global activeBank, totalBanks
 
-    if (state != 0) 
+    if (state != 0)
         return
 
-    ActiveBank := (ActiveBank >= TotalBanks) ? 1 : ActiveBank + 1
-    ShowGui(ActiveBank)
+    activeBank := (activeBank >= totalBanks) ? 1 : activeBank + 1
+    showOSD(activeBank)
 }
 
-ToggleMode(state) {
-    global IsLatchMode
+toggleLatchMode(state) {
+    global latchModeEnabled
 
-    if (state != 0) 
+    if (state != 0)
         return
 
-    IsLatchMode := !IsLatchMode
-    ShowGui(IsLatchMode ? "L" : "M")
+    latchModeEnabled := !latchModeEnabled
+    showOSD(latchModeEnabled ? "L" : "M")
 }
 
-ResetCurrentBankLatchState(state) {
-    global LatchStates, BaseStartCC, NumKeys, ActiveBank
+resetBankLatchStates(state) {
+    global latchStates, baseCC, keysPerBank, activeBank
 
-    if (state != 0) 
+    if (state != 0)
         return
 
-    bankOffset := (ActiveBank - 1) * NumKeys
-    Loop, %NumKeys% {
-        cc := BaseStartCC + bankOffset + (A_Index - 1)
-        LatchStates[cc] := 0
-        MidiMsg(cc, 0)
+    bankOffset := (activeBank - 1) * keysPerBank
+    Loop, %keysPerBank% {
+        cc := baseCC + bankOffset + (A_Index - 1)
+        latchStates[cc] := 0
+        sendMidiMessage(cc, 0)
     }
-    ShowGui("R")
+    showOSD("R")
 }
 
-ShowGui(val) {
-    GuiControl,, ModeText, % val
+showOSD(val) {
+    GuiControl,, OsdText, % val
     Gui, Show, xCenter yCenter w250 h250 NoActivate
-    SetTimer, RemoveOSD, -250
+    SetTimer, HideOSD, -250
 }
 
-RemoveOSD:
+HideOSD:
     Gui, Hide
 Return
 
-GetMidiOutId(name) {
-    numDevs := DllCall("winmm\midiOutGetNumDevs")
-    Loop, %numDevs% {
-        uID := A_Index - 1
-        VarSetCapacity(caps, 84, 0)
-        if (DllCall("winmm\midiOutGetDevCaps", "UInt", uID, "Ptr", &caps, "UInt", 84) = 0)
+getMidiOutId(name) {
+    numDevices := DllCall("winmm\midiOutGetNumDevs")
+    Loop, %numDevices% {
+        deviceIndex := A_Index - 1
+        VarSetCapacity(capsData, 84, 0)
+        if (DllCall("winmm\midiOutGetDevCaps", "UInt", deviceIndex, "Ptr", &capsData, "UInt", 84) = 0)
         {
-            if InStr(StrGet(&caps + 8, 32, "UTF-16"), name)
-                return uID
+            if InStr(StrGet(&capsData + 8, 32, "UTF-16"), name)
+                return deviceIndex
         }
     }
 return -1
 }
 
 OnExit:
-    if (hMidiOut) 
-        DllCall("winmm\midiOutClose", "Ptr", hMidiOut)
+    if (midiOutHandle)
+        DllCall("winmm\midiOutClose", "Ptr", midiOutHandle)
 ExitApp
