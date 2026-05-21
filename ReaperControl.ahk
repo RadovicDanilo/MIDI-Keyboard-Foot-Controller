@@ -18,6 +18,7 @@ global activeBank := 1
 global latchModeEnabled := true
 global latchStates := {}
 global physicalKeyStates := {}
+global scriptGuiHwnd := 0
 
 ; --- Initialization ---
 midiDeviceId := getMidiOutId(targetPort)
@@ -27,23 +28,72 @@ if (midiDeviceId != -1)
 AHI := new AutoHotInterception()
 
 ; GUI Setup
-Gui, +AlwaysOnTop -Caption +LastFound +Owner +E0x20
+Gui, +AlwaysOnTop -Caption +LastFound +Owner +E0x20 +HwndscriptGuiHwnd
 Gui, Color, 000000
 Gui, Font, s150 q5, Segoe UI Semibold
 Gui, Add, Text, vOsdText cWhite Center w250 h250 x0 y0, % activeBank
 
+configureTrayMenu()
+
 ; Key Subscriptions
 Loop, 5 {
     deviceId := A_Index + 5
-    AHI.SubscribeKey(deviceId, 61, true, Func("cycleBank")) ; F1
-    AHI.SubscribeKey(deviceId, 65, true, Func("toggleLatchMode")) ; F2
-    AHI.SubscribeKey(deviceId, 87, true, Func("resetBankLatchStates")) ; F3
+    AHI.SubscribeKey(deviceId, 59, true, Func("cycleBank")) ; F1
+    AHI.SubscribeKey(deviceId, 60, true, Func("toggleLatchMode")) ; F2
+    AHI.SubscribeKey(deviceId, 61, true, Func("resetBankLatchStates")) ; F3
     for keyIndex, code in keyCodes
         AHI.SubscribeKey(deviceId, code, true, Func("handleKeyEvent").Bind(keyIndex))
 }
 Return
 
 ; --- Functions ---
+configureTrayMenu() {
+    ; Set icon
+    Menu, Tray, Icon, %A_ScriptDir%\white.ico
+
+    ; Tooltip
+    Menu, Tray, Tip, MIDI keyboard
+
+    ; Remove default items 
+    Menu, Tray, NoStandard
+
+    ; Custom items
+    Menu, Tray, Add, Cycle Bank, TrayCycleBank
+    Menu, Tray, Add, Toggle Latch Mode, TrayToggleLatchMode
+    Menu, Tray, Add, Reset Bank Latch States, TrayResetBankLatchStates
+
+    Menu, Tray, Add
+    Menu, Tray, Add, Open Config Folder, TrayOpenConfig
+    Menu, Tray, Add, Restart Script, TrayRestart
+    Menu, Tray, Add, Exit, TrayExit
+
+    ; Default action (on double click)
+    Menu, Tray, Default, Cycle Bank
+}
+
+TrayCycleBank:
+    cycleBank(0)
+Return
+
+TrayToggleLatchMode:
+    toggleLatchMode(0)
+Return
+
+TrayResetBankLatchStates:
+    resetBankLatchStates(0)
+Return
+
+TrayOpenConfig:
+    Run, %A_ScriptDir%
+Return
+
+TrayRestart:
+    Reload
+Return
+
+TrayExit:
+ExitApp
+Return
 
 sendMidiMessage(cc, val) {
     global midiOutHandle
