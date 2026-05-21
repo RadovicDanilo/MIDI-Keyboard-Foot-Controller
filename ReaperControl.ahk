@@ -37,7 +37,7 @@ Loop, 5 {
     devID := A_Index + 5
     AHI.SubscribeKey(devID, 61, true, Func("ShiftGroup")) ; F3
     AHI.SubscribeKey(devID, 65, true, Func("ToggleMode")) ; F7
-    AHI.SubscribeKey(devID, 87, true, Func("GlobalReset")) ; F11
+    AHI.SubscribeKey(devID, 87, true, Func("ResetCurrentBankLatchState")) ; F11
     for i, code in Codes
         AHI.SubscribeKey(devID, code, true, Func("SendMidi").Bind(i))
 }
@@ -99,19 +99,17 @@ ToggleMode(state) {
     ShowGui(IsLatchMode ? "L" : "M")
 }
 
-GlobalReset(state) {
-    global LatchStates, BaseStartCC, NumKeys, TotalBanks
+ResetCurrentBankLatchState(state) {
+    global LatchStates, BaseStartCC, NumKeys, ActiveBank
 
     if (state != 0) 
         return
 
-    Loop, %TotalBanks% {
-        bankOffset := (A_Index - 1) * NumKeys
-        Loop, %NumKeys% {
-            cc := BaseStartCC + bankOffset + (A_Index - 1)
-            LatchStates[cc] := 0
-            MidiMsg(cc, 0)
-        }
+    bankOffset := (ActiveBank - 1) * NumKeys
+    Loop, %NumKeys% {
+        cc := BaseStartCC + bankOffset + (A_Index - 1)
+        LatchStates[cc] := 0
+        MidiMsg(cc, 0)
     }
     ShowGui("R")
 }
