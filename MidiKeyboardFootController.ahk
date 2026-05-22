@@ -149,6 +149,7 @@ handleKeyEvent(keyIndex, keyState) {
         value := latchStates[cc] := latchStates[cc] ? 0 : 127
     } else {
         value := (keyState = 1) ? 127 : 0
+        latchStates[cc] := value
     }
 
     sendMidiMessage(cc, value)
