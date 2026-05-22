@@ -27,7 +27,11 @@ global latchRows := 2
 global msgGuiHwnd := 0
 global escapeHeld := false
 
-; Initialize AutoHotInterception instance before subscriptions
+MidiID := getMidiOutId(targetPort)
+if (MidiID != -1){
+    DllCall("winmm\midiOutOpen", "Ptr*", midiOutHandle, "UInt", MidiID, "Ptr", 0, "Ptr", 0, "UInt", 0)
+}
+
 AHI := new AutoHotInterception()
 configureTrayMenu()
 
@@ -127,7 +131,7 @@ sendMidiMessage(cc, val) {
     global midiOutHandle
     if (midiOutHandle) {
         message := 0xB0 | (cc << 8) | (val << 16)
-        DllCall("winmm\\midiOutShortMsg", "Ptr", midiOutHandle, "UInt", message)
+        DllCall("winmm\midiOutShortMsg", "Ptr", midiOutHandle, "UInt", message)
     }
 }
 
@@ -148,8 +152,7 @@ handleKeyEvent(keyIndex, keyState) {
         }
         value := latchStates[cc] := latchStates[cc] ? 0 : 127
     } else {
-        value := (keyState = 1) ? 127 : 0
-        latchStates[cc] := value
+        value := latchStates[cc] := (keyState = 1) ? 127 : 0
     }
 
     sendMidiMessage(cc, value)
@@ -168,8 +171,8 @@ cycleBank(state) {
         return
     }
     activeBank := (activeBank >= totalBanks) ? 1 : activeBank + 1
-    resetBankLatchStates(0)
     showOSD(activeBank)
+	showLatchOSD()
 }
 
 toggleLatchMode(state) {
@@ -178,8 +181,8 @@ toggleLatchMode(state) {
         return
     }
     latchModeEnabled := !latchModeEnabled
-    resetBankLatchStates(0)
     showOSD(latchModeEnabled ? "L" : "M")
+	showLatchOSD()
 }
 
 resetBankLatchStates(state) {
@@ -271,11 +274,11 @@ Return
 
 ; MIDI output device helper
 getMidiOutId(name) {
-    numDevices := DllCall("winmm\\midiOutGetNumDevs")
+    numDevices := DllCall("winmm\midiOutGetNumDevs")
     Loop, %numDevices% {
         deviceIndex := A_Index - 1
         VarSetCapacity(capsData, 84, 0)
-        if (DllCall("winmm\\midiOutGetDevCaps", "UInt", deviceIndex, "Ptr", &capsData, "UInt", 84) = 0) {
+        if (DllCall("winmm\midiOutGetDevCaps", "UInt", deviceIndex, "Ptr", &capsData, "UInt", 84) = 0) {
             if (InStr(StrGet(&capsData + 8, 32, "UTF-16"), name)) {
                 return deviceIndex
             }
@@ -286,6 +289,6 @@ return -1
 
 OnExit:
     if (midiOutHandle) {
-        DllCall("winmm\\midiOutClose", "Ptr", midiOutHandle)
+        DllCall("winmm\midiOutClose", "Ptr", midiOutHandle)
     }
 ExitApp
