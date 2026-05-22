@@ -89,7 +89,7 @@ configureTrayMenu() {
     Menu, Tray, Add, Restart Script, TrayRestart
     Menu, Tray, Add, Exit, TrayExit
 
-    Menu, Tray, Default, Cycle Bank
+    Menu, Tray, Default, Toggle Latch OSD
 }
 
 TrayCycleBank:
@@ -259,7 +259,7 @@ showOSD(val) {
     Gui, Msg:Default
     GuiControl,, MsgText, % val
     Gui, Msg:Show, xCenter yCenter w250 h250 NoActivate
-    SetTimer, HideMsgOSD, -250
+    SetTimer, HideMsgOSD, -350
 }
 
 HideMsgOSD:
