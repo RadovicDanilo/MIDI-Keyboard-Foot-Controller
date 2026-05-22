@@ -219,7 +219,7 @@ showLatchOSD() {
     rows := rows > 0 ? rows : 1
     totalKeys := keysPerBank
     cols := Ceil(totalKeys / rows)
-    dot := "●"
+    dot := Chr(0x25CF)
     dotSize := 28
     spacing := 2
     statusHeight := 20
