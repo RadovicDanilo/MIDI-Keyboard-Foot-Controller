@@ -1,86 +1,86 @@
 # 🎸 MIDI-Keyboard-Foot-Controller
 
-**MIDI-Keyboard-Foot-Controller** turns a **second keyboard** into a MIDI foot pedalboard. By using **AutoHotkey** and **AutoHotInterception (AHI)**, it converts physical key presses from a specific device into **MIDI CC messages** without interfering with your main typing keyboard.
-
-## 🧠 How it works
-
-The script intercepts raw input from secondary keyboards and converts them into **MIDI CC commands** organized into 3 "Groups" or "Modes."
-
-* **Pure MIDI:** It communicates via virtual MIDI ports.
-* **Universal Compatibility:** Works with **AmpliTube, Neural DSP, Guitar Rig, REAPER, Ableton, Logic**, and any other software that accepts MIDI CC.
-* **Background Operation:** Works even when your DAW or Plugin is minimized or not in focus.
-* **Visual HUD:** A minimalist 4K-ready On-Screen Display (OSD) shows the active Mode (1, 2, or 3) whenever you switch.
+This repository contains `MidiKeyboardFootController.ahk`, an AutoHotkey v1 script that maps a secondary keyboard (or foot controller) to MIDI CC messages for use with DAWs, plugins and other MIDI-aware audio software.
 
 ---
 
-## 🔌 Dependencies
+## Third-party notice
 
-* **[AutoHotkey (v1.1)](https://www.autohotkey.com/)** -> The scripting engine.
-* **[AutoHotInterception](https://github.com/evilC/AutoHotInterception)** -> Library included in `Lib/` to isolate the second keyboard.
-* **[loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html)** -> Required to create the virtual MIDI cable.
+This repository includes AutoHotInterception (AHI) in `Lib/` and it's `Monitor.ahk` script in the project direcotry. AHI is distributed under the MIT License, and its license text is included separately in [THIRD_PARTY_NOTICES/AutoHotInterception-LICENSE.txt](THIRD_PARTY_NOTICES/AutoHotInterception-LICENSE.txt).
 
----
+## 🔌 Requirements
 
-## ⌨️ Hardware Layout
+* AutoHotkey v1.1
+* AutoHotInterception (already included in /Lib)
+* loopMIDI (or another virtual MIDI port) named `LoopMIDI Port` (or change `targetPort` in the script)
+* And an old keyboard of course, you can glue Lego bricks on top of the keys to make them taller.
 
-![Keyboard example](images/kbd.jpg)
-
-**Recommendations:**
-
-* **10 keys total** 
-* Keys should be **well spaced** so you can hit them blindly with your foot
-* If the keys are too short glue **LEGO bricks** or similar plastic blocks on top to increase height and tactile feedback
+![Keyboard example](images/kbd.jpeg)
 
 ---
 
-## 📁 Repository Structure
+## Key Behaviors (summary of the script)
 
-* **`MidiFootController.ahk`**: The main script. Handles the MIDI logic.
-* **`Monitor.ahk`**: Utility to identify your secondary keyboard's **DeviceID** and find **ScanCodes**.
-* **`Lib/`**: Contains the AHI framework (Required).
-
----
-
-## ⚙️ Setup Instructions
-
-### 1. LoopMIDI Setup
-
-1. Open loopMIDI.
-2. Create a new port named: `LoopMIDI Port`.
-3. Keep loopMIDI running in the background.
-
-### 2. Identify your Keyboard & Keys
-
-Before running the main script, you must identify your specific hardware IDs using **`Monitor.ahk`**.
-
-#### **Identifying the Device ID**
-
-* **The Highest ID Rule:** In most setups, the last keyboard plugged in will be assigned the **highest DeviceID**.
-* **The ID Limit:** Windows/AHI supports a maximum of **10 Keyboard IDs**.
-* **When unpluged and repluged:** If you unplug and replug your keyboard, Windows wukk increments the ID (e.g., from ID 7 to ID 8).
-* These IDs **only reset** after a full system restart.
-
-* **Subscription Logic:** To ensure the script works even if the keyboard "moves" IDs after being replugged, the script is configured to subscribe to **ID 6 and everything above it** (up to 10). This creates a "safety net" so you don't have to edit the script every time you move a USB cable.
-* you may need to modify the line 24: `Loop, 5 {`. My keyboard ID is 6 so for me the number is 6 - 1 = 5.
-
-#### **Identifying ScanCodes**
-
-1. Run `Monitor.ahk`.
-2. Press the keys you intend to use as pedals.
-3. Note the **ScanCode** for each key (e.g., `57` for Space, `347` for Right-Alt).
-4. If your keys differ from the defaults in the script, update the `Codes := [...]` array at the top of the `MidiFootController.ahk` file.
+- MIDI output is sent via WinMM (midiOutShortMsg) to the configured `targetPort`.
+- Physical keys map to MIDI CCs computed from `baseCC`, `keysPerBank`, and the active bank.
+- Latch mode toggles CC on press; momentary mode sends on/off on press/release.
+- Two separate on-screen overlays (OSDs):
+	- Message OSD: small centered square used for short feedback (bank, mode, reset). Auto-hides after a short period.
+	- Latch OSD: persistent top-centered black box showing per-key latch states as colored dots; also displays current bank and mode. The dot layout uses `latchRows` and respects `keysPerBank`.
 
 ---
 
-### 3. Usage & Modes
+## Configuration (top of `MidiKeyboardFootController.ahk`)
 
-* **The Keys:** 10 physical keys are mapped to CC messages.
-* **The Switch:** Press **F1** on the secondary keyboard to cycle through **Modes 1, 2, and 3**.
-* **The CC Mapping:**
+Edit these variables to customize behavior:
 
-| Key | Mode 1 (CC) | Mode 2 (CC) | Mode 3 (CC) |
-| --- | --- | --- | --- |
-| **Pedal 1** | 90 | 100 | 110 |
-| **Pedal 2** | 91 | 101 | 111 |
-| ... | ... | ... | ... |
-| **Pedal 10** | 99 | 109 | 119 |
+- `targetPort` — MIDI output port name (default: `LoopMIDI Port`).
+- `baseCC` — Base Control Change number (default: 90).
+- `keysPerBank` — Number of keys per bank (default: 10), this must be equal to the keyCodes array size.
+- `totalBanks` — Number of banks (default: 2).
+- `keyCodes` — Array of scan codes for the physical keys, get this by using AHI's Monitor.ahk script.
+- `latchRows` — Number of rows for the Latch OSD layout (default: 2).
+- `connectedKeyboardCount` — Number of keyboard IDs already in use before the foot controller is connected (default: 5). This will depend on how many keyboard you have, more on this later.
+
+Notes:
+- CC for key index `i` on bank `b` is: `baseCC + (b-1)*keysPerBank + (i-1)`.
+
+---
+
+## Controls (current mapping)
+
+- Esc + F5 → Cycle Bank
+- Esc + F6 → Toggle Latch Mode (Latch vs Momentary)
+- Esc + F7 → Reset Bank Latch States
+- Esc + F8 → Toggle Latch OSD (show/hide)
+
+The tray menu provides the same actions and extras: Open Config Folder, Restart Script, Exit.
+
+---
+
+## Latch OSD details
+
+- The Latch OSD is a frameless, always-on-top black window that displays:
+	- A status line showing `Bank: <n>  |  Mode: L` or `M` (L = latch mode, M = momentary)
+	- Colored dots for each key: green = on, red = off.
+- The layout adapts to `keysPerBank` and `latchRows`.
+- It is hidden by default and can be shown/hidden.
+
+---
+
+## Setup
+
+1. Install AutoHotkey v1.1.
+2. Install LoopMIDI and create a virtual MIDI port named `LoopMIDI Port`.
+3. Open `Monitor.ahk` from AutoHotInterception before connecting the foot controller.
+4. Count how many keyboard IDs are already in use, then set `connectedKeyboardCount` in `MidiKeyboardFootController.ahk` to that number.
+5. Use `Monitor.ahk` to note the scan codes for the physical keys you want to use, then update `keyCodes` and `keysPerBank`.
+6. Run `MidiKeyboardFootController.ahk`.
+7. If you want the script to run automatically when you log in, create a shortcut to `MidiKeyboardFootController.ahk` and place it in the Startup folder.
+
+Important notes:
+
+- Windows/AHI supports up to 10 keyboard IDs total.
+- Keyboard IDs are assigned dynamically and ill increment when devices are unplugged and replugged until Windows is restarted.
+- If your foot controller is already connected at startup, Windows may assign it a lower ID.
+- The script subscribes to the remaining IDs above `connectedKeyboardCount`, so if IDs 1 through 5 are already used, the script listens on 6 through 10.

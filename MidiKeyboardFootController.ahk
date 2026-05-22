@@ -1,4 +1,4 @@
-﻿#Persistent
+#Persistent
 #SingleInstance Force
 #NoEnv
 SetBatchLines, -1
@@ -11,6 +11,8 @@ baseCC := 90
 keysPerBank := 10
 totalBanks := 2
 keyCodes := [347, 57, 348, 336, 284, 2, 7, 12, 327, 55]
+maxKeyboardIds := 10
+connectedKeyboardCount := 5
 
 ; --- Globals ---
 global midiOutHandle := 0
@@ -37,8 +39,8 @@ Gui, Msg:Font, s150 q5 cWhite, Segoe UI Semibold
 Gui, Msg:Add, Text, vMsgText Center w250 h250 x0 y0
 Gui, Msg:Hide
 
-Loop, 5 {
-    deviceId := A_Index + 5
+Loop, % maxKeyboardIds - connectedKeyboardCount {
+    deviceId := connectedKeyboardCount + A_Index
 
     ; Combo launcher keys: Esc + F5..F8
     ; Esc alone and F5..F8 alone do nothing.
