@@ -6,7 +6,7 @@ This repository contains `MidiKeyboardFootController.ahk`, an AutoHotkey v1 scri
 
 ## Third-party notice
 
-This repository includes AutoHotInterception (AHI) in `Lib/` and it's `Monitor.ahk` script in the project direcotry. AHI is distributed under the MIT License, and its license text is included separately in [THIRD_PARTY_NOTICES/AutoHotInterception-LICENSE.txt](THIRD_PARTY_NOTICES/AutoHotInterception-LICENSE.txt).
+This repository includes AutoHotInterception (AHI) in `Lib/` and it's `Monitor.ahk` script in the project directory. AHI is distributed under the MIT License, and its license text is included separately in [THIRD_PARTY_NOTICES/AutoHotInterception-LICENSE.txt](THIRD_PARTY_NOTICES/AutoHotInterception-LICENSE.txt).
 
 ## 🔌 Requirements
 
