@@ -46,9 +46,9 @@ Gui, Msg:Hide
 Loop, % maxKeyboardIds - connectedKeyboardCount {
     deviceId := connectedKeyboardCount + A_Index
 
-    ; Combo launcher keys: Esc + F5..F8
-    ; Esc alone and F5..F8 alone do nothing.
-    AHI.SubscribeKey(deviceId, 1, true, Func("handleEscapeState"))
+    ; Combo launcher keys: F3 + (F5..F8)
+    ; F3 alone and F5..F8 alone do nothing.
+    AHI.SubscribeKey(deviceId, 61, true, Func("handleEscapeState"))
     AHI.SubscribeKey(deviceId, 63, true, Func("handleEscFunctionCombo").Bind("cycleBank"))
     AHI.SubscribeKey(deviceId, 64, true, Func("handleEscFunctionCombo").Bind("toggleLatchMode"))
     AHI.SubscribeKey(deviceId, 65, true, Func("handleEscFunctionCombo").Bind("resetBankLatchStates"))

@@ -10,6 +10,7 @@ This repository includes AutoHotInterception (AHI) in `Lib/` and it's `Monitor.a
 
 ## 🔌 Requirements
 
+
 * AutoHotkey v1.1
 * AutoHotInterception (already included in /Lib)
 * loopMIDI (or another virtual MIDI port) named `LoopMIDI Port` (or change `targetPort` in the script)
@@ -49,10 +50,10 @@ Notes:
 
 ## Controls (current mapping)
 
-- Esc + F5 → Cycle Bank
-- Esc + F6 → Toggle Latch Mode (Latch vs Momentary)
-- Esc + F7 → Reset Bank Latch States
-- Esc + F8 → Toggle Latch OSD (show/hide)
+- F3 + F5 → Cycle Bank
+- F3 + F6 → Toggle Latch Mode (Latch vs Momentary)
+- F3 + F7 → Reset Bank Latch States
+- F3 + F8 → Toggle Latch OSD (show/hide)
 
 The tray menu provides the same actions and extras: Open Config Folder, Restart Script, Exit.
 
