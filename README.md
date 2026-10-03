@@ -11,8 +11,6 @@ stealing the same keys from the rest of the system.
 ![Old keyboard used as a foot controller](images/kbd.jpeg)
 
 You can also glue Lego bricks on top of the keys to make them easier to hit.
-This is optional, but highly recommended for maximum professional
-foot-controller engineering.
 
 ## What it does
 
