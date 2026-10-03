@@ -8,6 +8,8 @@ Process, Priority,, High
 ; --- Device Target Info ---
 targetVID := "0566"
 targetPID := "3107"
+targetVIDNumber := "0x" . targetVID
+targetPIDNumber := "0x" . targetPID
 
 ; --- Configuration ---
 targetPort := "LoopMIDI Port"
@@ -15,6 +17,9 @@ baseCC := 90
 keysPerBank := 10
 totalBanks := 2
 keyCodes := [347, 57, 348, 336, 284, 2, 7, 12, 327, 55]
+deviceScanFastMs := 250
+deviceScanIdleMs := 1000
+comboKeyCodes := [61, 63, 64, 65, 66]
 
 ; --- Globals ---
 global midiOutHandle := 0
@@ -29,6 +34,8 @@ global latchRows := 2
 global msgGuiHwnd := 0
 global escapeHeld := false
 global boundDeviceId := 0
+global targetVIDNumber, targetPIDNumber, deviceScanFastMs, deviceScanIdleMs
+global comboKeyCodes
 
 MidiID := getMidiOutId(targetPort)
 if (MidiID != -1){
@@ -45,66 +52,45 @@ Gui, Msg:Font, s150 q5 cWhite, Segoe UI Semibold
 Gui, Msg:Add, Text, vMsgText Center w250 h250 x0 y0
 Gui, Msg:Hide
 
-; Continuously poll every second for plug/unplug events
-SetTimer, MonitorDeviceConnection, 1000
+; Poll for plug/unplug events; interval changes based on connection state.
+SetTimer, MonitorDeviceConnection, %deviceScanFastMs%
 GoSub, MonitorDeviceConnection
 Return
 
 MonitorDeviceConnection:
-    currentDevId := safeGetKeyboardId(AHI, targetVID, targetPID)
+    currentDevId := safeGetKeyboardId(AHI, targetVIDNumber, targetPIDNumber)
 
     ; If target keyboard is not detected or unplugged
     if (!currentDevId) {
+        if (boundDeviceId) {
+            unsubscribeDevice(boundDeviceId)
+        }
         boundDeviceId := 0
+        SetTimer, MonitorDeviceConnection, %deviceScanFastMs%
         return
     }
 
     ; Device is connected; bind if not already bound to this active ID slot
     if (boundDeviceId != currentDevId) {
         if (boundDeviceId != 0) {
-            AHI.UnsubscribeKey(boundDeviceId, 61)
-            AHI.UnsubscribeKey(boundDeviceId, 63)
-            AHI.UnsubscribeKey(boundDeviceId, 64)
-            AHI.UnsubscribeKey(boundDeviceId, 65)
-            AHI.UnsubscribeKey(boundDeviceId, 66)
-            for keyIndex, code in keyCodes {
-                AHI.UnsubscribeKey(boundDeviceId, code)
-            }
+            unsubscribeDevice(boundDeviceId)
         }
 
         boundDeviceId := currentDevId
-
-        ; Combo launcher keys: F3 (61) + (F5..F8: 63..66)
-        AHI.SubscribeKey(currentDevId, 61, true, Func("handleEscapeState"))
-        AHI.SubscribeKey(currentDevId, 63, true, Func("handleEscFunctionCombo").Bind("cycleBank"))
-        AHI.SubscribeKey(currentDevId, 64, true, Func("handleEscFunctionCombo").Bind("resetAllKeysToToggle"))
-        AHI.SubscribeKey(currentDevId, 65, true, Func("handleEscFunctionCombo").Bind("resetBankLatchStates"))
-        AHI.SubscribeKey(currentDevId, 66, true, Func("handleEscFunctionCombo").Bind("toggleLatchOSD"))
-
-        for keyIndex, code in keyCodes {
-            AHI.SubscribeKey(currentDevId, code, true, Func("handleKeyEvent").Bind(keyIndex))
-        }
+        physicalKeyStates := {}
+        subscribeDevice(currentDevId)
     }
+    SetTimer, MonitorDeviceConnection, %deviceScanIdleMs%
 Return
 
 ; Robust device scanner designed for composite HID devices
 safeGetKeyboardId(AHI_Instance, vid, pid) {
-    cleanVID := Format("{:04X}", "0x" . RegExReplace(vid, "i)^0x", ""))
-    cleanPID := Format("{:04X}", "0x" . RegExReplace(pid, "i)^0x", ""))
-
     try {
         devList := AHI_Instance.GetDeviceList()
         for i, dev in devList {
             if (dev.IsMouse)
                 continue
-
-            hwId := dev.HardwareId
-            StringUpper, hwId, hwId
-
-            vidMatch := RegExMatch(hwId, "i)VID_?" . cleanVID) || (Format("{:04X}", dev.Vid) == cleanVID)
-            pidMatch := RegExMatch(hwId, "i)PID_?" . cleanPID) || (Format("{:04X}", dev.Pid) == cleanPID)
-
-            if (vidMatch && pidMatch) {
+            if (dev.Vid = vid && dev.Pid = pid) {
                 return dev.Id
             }
         }
@@ -112,6 +98,32 @@ safeGetKeyboardId(AHI_Instance, vid, pid) {
         return 0
     }
 return 0
+}
+
+subscribeDevice(deviceId) {
+    global AHI, keyCodes
+
+    ; Combo launcher keys: F3 (61) + F5..F8 (63..66).
+    AHI.SubscribeKey(deviceId, 61, true, Func("handleEscapeState"))
+    AHI.SubscribeKey(deviceId, 63, true, Func("handleEscFunctionCombo").Bind("cycleBank"))
+    AHI.SubscribeKey(deviceId, 64, true, Func("handleEscFunctionCombo").Bind("resetAllKeysToToggle"))
+    AHI.SubscribeKey(deviceId, 65, true, Func("handleEscFunctionCombo").Bind("resetBankLatchStates"))
+    AHI.SubscribeKey(deviceId, 66, true, Func("handleEscFunctionCombo").Bind("toggleLatchOSD"))
+
+    for keyIndex, code in keyCodes {
+        AHI.SubscribeKey(deviceId, code, true, Func("handleKeyEvent").Bind(keyIndex))
+    }
+}
+
+unsubscribeDevice(deviceId) {
+    global AHI, keyCodes, comboKeyCodes
+
+    for keyIndex, code in comboKeyCodes {
+        AHI.UnsubscribeKey(deviceId, code)
+    }
+    for keyIndex, code in keyCodes {
+        AHI.UnsubscribeKey(deviceId, code)
+    }
 }
 
 ; ----------------------------
@@ -189,11 +201,11 @@ sendMidiMessage(cc, val) {
 handleKeyEvent(keyIndex, keyState) {
     global activeBank, latchStates, momentaryModes, baseCC, keysPerBank, physicalKeyStates, latchOSDVisible, escapeHeld
 
-    if (keyState = physicalKeyStates["K" keyIndex]) {
+    if (keyState = physicalKeyStates[keyIndex]) {
         return
     }
 
-    physicalKeyStates["K" keyIndex] := keyState
+    physicalKeyStates[keyIndex] := keyState
     cc := baseCC + ((activeBank - 1) * keysPerBank) + (keyIndex - 1)
 
     ; --- ESC / F3 Combo Check ---

@@ -1,87 +1,203 @@
-# 🎸 MIDI-Keyboard-Foot-Controller
+# MIDI Keyboard Foot Controller
 
-This repository contains `MidiKeyboardFootController.ahk`, an AutoHotkey v1 script that maps a secondary keyboard (or foot controller) to MIDI CC messages for use with DAWs, plugins and other MIDI-aware audio software.
+This project turns an old keyboard into a small MIDI foot controller.
+Each selected key sends a MIDI CC message, so it can control effects,
+plugins, volume, mute, presets or anything else that understands MIDI.
 
----
+The script uses [AutoHotInterception](Lib/) instead of normal Windows
+keyboard hotkeys. This means it can listen to one specific keyboard without
+stealing the same keys from the rest of the system.
+
+![Old keyboard used as a foot controller](images/kbd.jpeg)
+
+You can also glue Lego bricks on top of the keys to make them easier to hit.
+This is optional, but highly recommended for maximum professional
+foot-controller engineering.
+
+## What it does
+
+- Sends MIDI Control Change messages through WinMM.
+- Sends MIDI to a virtual port such as `LoopMIDI Port`.
+- Maps each physical key to one CC number.
+- Supports multiple banks.
+- Supports two modes for every key:
+  - **Latch / Toggle**: press once for `127`, press again for `0`.
+  - **Momentary**: press for `127`, release for `0`.
+- Detects the controller by its VID/PID instead of relying on a fixed
+  keyboard ID.
+- Automatically reconnects after the controller is unplugged and plugged in.
+- Shows optional on-screen feedback:
+  - a short message for bank changes and mode changes;
+  - a persistent status window for key states.
+
+## Requirements
+
+- Windows
+- AutoHotkey v1.1
+- AutoHotInterception, already included in `Lib`
+- Interception driver and the required AHI DLL files
+- loopMIDI, or another virtual MIDI port
+- A second keyboard or foot controller
+
+The default MIDI port name is `LoopMIDI Port`. If your port has another name,
+change `targetPort` near the top of
+[`MidiKeyboardFootController.ahk`](MidiKeyboardFootController.ahk).
+
+## Quick setup
+
+1. Install AutoHotkey v1.1.
+2. Install the Interception driver required by AutoHotInterception.
+3. Install loopMIDI and create a port called `LoopMIDI Port`, or change the
+   script configuration to match your port.
+4. Connect the keyboard or foot controller.
+5. Run [`Monitor.ahk`](Monitor.ahk).
+6. Use the monitor to find:
+   - the controller VID and PID;
+   - the scan code of every key you want to use.
+7. Put the VID, PID and scan codes into
+   [`MidiKeyboardFootController.ahk`](MidiKeyboardFootController.ahk).
+8. Start `MidiKeyboardFootController.ahk`.
+9. Select the virtual MIDI port in your DAW or plugin.
+
+The controller must be connected while using `Monitor.ahk`, otherwise its
+device information cannot be read.
+
+## Basic configuration
+
+Configuration is at the top of `MidiKeyboardFootController.ahk`:
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `targetVID` | Controller USB vendor ID | `0566` |
+| `targetPID` | Controller USB product ID | `3107` |
+| `targetPort` | MIDI output port name | `LoopMIDI Port` |
+| `baseCC` | First CC number used by bank 1 | `90` |
+| `keysPerBank` | Number of controller keys in one bank | `10` |
+| `totalBanks` | Number of available banks | `2` |
+| `keyCodes` | Array of physical scan codes | 10 codes |
+| `latchRows` | Rows used by the latch OSD | `2` |
+| `deviceScanFastMs` | Reconnect scan interval while disconnected | `250` |
+| `deviceScanIdleMs` | Scan interval after successful connection | `1000` |
+
+`keysPerBank` must match the number of entries in `keyCodes`.
+The scan codes in `keyCodes` are not ordinary keyboard key names. Get them
+from AHI's `Monitor.ahk`.
+
+### MIDI CC calculation
+
+The CC number is calculated like this:
+
+```text
+CC = baseCC + (bank - 1) * keysPerBank + (key index - 1)
+```
+
+With the default settings:
+
+- bank 1 uses CC `90` through `99`;
+- bank 2 uses CC `100` through `109`.
+
+## Controls
+
+The controller uses F3 as the combo key:
+
+| Combination | Action |
+| --- | --- |
+| F3 + F5 | Cycle to the next bank |
+| F3 + a pad key | Switch that pad between Toggle and Momentary |
+| F3 + F6 | Set every key in the current bank to Toggle mode |
+| F3 + F7 | Reset all latch states in the current bank |
+| F3 + F8 | Show or hide the latch OSD |
+
+The combo action runs when the second key is released. This prevents an
+action from firing repeatedly while the key is held.
+
+### Changing one key to Momentary mode
+
+1. Hold F3.
+2. Press the pad key you want to change.
+3. Release the pad key and F3.
+
+The short message OSD shows `M` for Momentary or `T` for Toggle.
+The setting applies to the current bank and key. It does not change the mode
+of other banks.
+
+## On-screen displays
+
+### Message OSD
+
+The centered black square briefly displays:
+
+- the active bank number;
+- `M` or `T` after changing a key mode;
+- `T` after resetting modes;
+- `R` after resetting latch states.
+
+### Latch OSD
+
+The latch OSD is hidden by default. Enable it with `F3 + F8` or from the
+tray menu.
+
+Each dot represents one key in the current bank:
+
+- **Green**: the CC is currently on.
+- **Yellow**: the key is off and uses Momentary mode.
+- **Red**: the key is off and uses Toggle mode.
+
+The layout uses `latchRows` and automatically adapts to `keysPerBank`.
+
+## Tray menu
+
+The tray icon contains the same main controls:
+
+- Cycle Bank
+- Reset All Keys to Toggle Mode
+- Reset Bank Latch States
+- Toggle Latch OSD
+- Open Config Folder
+- Restart Script
+- Exit
+
+## Keyboard detection and performance
+
+The script does not scan for every key press. AutoHotInterception receives
+key events directly and calls the relevant callback immediately.
+
+The device scanner is used only to detect connect and disconnect events:
+
+- every `250 ms` while the target controller is missing;
+- every `1000 ms` after the controller is bound.
+
+When the controller is found, the script compares its numeric VID/PID and
+subscribes only to the configured scan codes. When it disappears, the old
+subscriptions are removed before reconnecting.
+
+This avoids the old fixed keyboard-ID offset approach. Windows may assign a
+different device ID after reconnecting, but the script finds the device again
+by VID/PID.
+
+## Important notes
+
+- MIDI output requires the configured port to exist.
+- CC values are `127` for on and `0` for off.
+- Toggle mode reacts only to key-down events.
+- Momentary mode reacts to both key-down and key-up events.
+- Keep `keysPerBank` equal to the number of scan codes in `keyCodes`.
+- Do not use the same physical scan code twice in `keyCodes`.
+- If a key seems stuck after reconnecting, unplug and reconnect the controller
+  once and make sure the correct scan codes are configured.
+
+## Starting with Windows
+
+To start the controller automatically:
+
+1. Create a shortcut to `MidiKeyboardFootController.ahk`.
+2. Press `Win + R`.
+3. Enter `shell:startup`.
+4. Put the shortcut in the Startup folder.
 
 ## Third-party notice
 
-This repository includes AutoHotInterception (AHI) in `Lib/` and it's `Monitor.ahk` script in the project directory. AHI is distributed under the MIT License, and its license text is included separately in [THIRD_PARTY_NOTICES/AutoHotInterception-LICENSE.txt](THIRD_PARTY_NOTICES/AutoHotInterception-LICENSE.txt).
-
-## 🔌 Requirements
-
-
-* AutoHotkey v1.1
-* AutoHotInterception (already included in /Lib)
-* loopMIDI (or another virtual MIDI port) named `LoopMIDI Port` (or change `targetPort` in the script)
-* And an old keyboard of course, you can glue Lego bricks on top of the keys to make them taller.
-
-![Keyboard example](images/kbd.jpeg)
-
----
-
-## Key Behaviors (summary of the script)
-
-- MIDI output is sent via WinMM (midiOutShortMsg) to the configured `targetPort`.
-- Physical keys map to MIDI CCs computed from `baseCC`, `keysPerBank`, and the active bank.
-- Latch mode toggles CC on press; momentary mode sends on/off on press/release.
-- Two separate on-screen overlays (OSDs):
-	- Message OSD: small centered square used for short feedback (bank, mode, reset). Auto-hides after a short period.
-	- Latch OSD: persistent top-centered black box showing per-key latch states as colored dots; also displays current bank and mode. The dot layout uses `latchRows` and respects `keysPerBank`.
-
----
-
-## Configuration (top of `MidiKeyboardFootController.ahk`)
-
-Edit these variables to customize behavior:
-
-- `targetPort` — MIDI output port name (default: `LoopMIDI Port`).
-- `baseCC` — Base Control Change number (default: 90).
-- `keysPerBank` — Number of keys per bank (default: 10), this must be equal to the keyCodes array size.
-- `totalBanks` — Number of banks (default: 2).
-- `keyCodes` — Array of scan codes for the physical keys, get this by using AHI's Monitor.ahk script.
-- `latchRows` — Number of rows for the Latch OSD layout (default: 2).
-- `connectedKeyboardCount` — Number of keyboard IDs already in use before the foot controller is connected (default: 5). This will depend on how many keyboard you have, more on this later.
-
-Notes:
-- CC for key index `i` on bank `b` is: `baseCC + (b-1)*keysPerBank + (i-1)`.
-
----
-
-## Controls (current mapping)
-
-- F3 + F5 → Cycle Bank
-- F3 + F6 → Toggle Latch Mode (Latch vs Momentary)
-- F3 + F7 → Reset Bank Latch States
-- F3 + F8 → Toggle Latch OSD (show/hide)
-
-The tray menu provides the same actions and extras: Open Config Folder, Restart Script, Exit.
-
----
-
-## Latch OSD details
-
-- The Latch OSD is a frameless, always-on-top black window that displays:
-	- A status line showing `Bank: <n>  |  Mode: L` or `M` (L = latch mode, M = momentary)
-	- Colored dots for each key: green = on, red = off.
-- The layout adapts to `keysPerBank` and `latchRows`.
-- It is hidden by default and can be shown/hidden.
-
----
-
-## Setup
-
-1. Install AutoHotkey v1.1.
-2. Install LoopMIDI and create a virtual MIDI port named `LoopMIDI Port`.
-3. Open `Monitor.ahk` from AutoHotInterception before connecting the foot controller.
-4. Count how many keyboard IDs are already in use, then set `connectedKeyboardCount` in `MidiKeyboardFootController.ahk` to that number.
-5. Use `Monitor.ahk` to note the scan codes for the physical keys you want to use, then update `keyCodes` and `keysPerBank`.
-6. Run `MidiKeyboardFootController.ahk`.
-7. If you want the script to run automatically when you log in, create a shortcut to `MidiKeyboardFootController.ahk` and place it in the Startup folder.
-
-Important notes:
-
-- Windows/AHI supports up to 10 keyboard IDs total.
-- Keyboard IDs are assigned dynamically and ill increment when devices are unplugged and replugged until Windows is restarted.
-- If your foot controller is already connected at startup, Windows may assign it a lower ID.
-- The script subscribes to the remaining IDs above `connectedKeyboardCount`, so if IDs 1 through 5 are already used, the script listens on 6 through 10.
+This repository includes AutoHotInterception in `Lib` and its
+`Monitor.ahk` helper script. AHI is distributed under the MIT License.
+The license text is included in
+[`THIRD_PARTY_NOTICES/AutoHotInterception-LICENSE.txt`](THIRD_PARTY_NOTICES/AutoHotInterception-LICENSE.txt).
