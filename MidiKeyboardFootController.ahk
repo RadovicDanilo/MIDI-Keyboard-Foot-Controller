@@ -19,8 +19,8 @@ keyCodes := [347, 57, 348, 336, 284, 2, 7, 12, 327, 55]
 ; --- Globals ---
 global midiOutHandle := 0
 global activeBank := 1
-global latchModeEnabled := true
 global latchStates := {}
+global momentaryModes := {} ; 1 = Momentary, 0/unset = Toggle (Latch)
 global physicalKeyStates := {}
 global scriptGuiHwnd := 0
 global latchGuiHwnd := 0
@@ -74,10 +74,10 @@ MonitorDeviceConnection:
 
         boundDeviceId := currentDevId
 
-        ; Combo launcher keys: F3 + (F5..F8)
+        ; Combo launcher keys: F3 (61) + (F5..F8: 63..66)
         AHI.SubscribeKey(currentDevId, 61, true, Func("handleEscapeState"))
         AHI.SubscribeKey(currentDevId, 63, true, Func("handleEscFunctionCombo").Bind("cycleBank"))
-        AHI.SubscribeKey(currentDevId, 64, true, Func("handleEscFunctionCombo").Bind("toggleLatchMode"))
+        AHI.SubscribeKey(currentDevId, 64, true, Func("handleEscFunctionCombo").Bind("resetAllKeysToToggle"))
         AHI.SubscribeKey(currentDevId, 65, true, Func("handleEscFunctionCombo").Bind("resetBankLatchStates"))
         AHI.SubscribeKey(currentDevId, 66, true, Func("handleEscFunctionCombo").Bind("toggleLatchOSD"))
 
@@ -101,7 +101,6 @@ safeGetKeyboardId(AHI_Instance, vid, pid) {
             hwId := dev.HardwareId
             StringUpper, hwId, hwId
 
-            ; RegEx check to match VID/PID inside composite hardware strings like HID\VID_0566&PID_3107&...
             vidMatch := RegExMatch(hwId, "i)VID_?" . cleanVID) || (Format("{:04X}", dev.Vid) == cleanVID)
             pidMatch := RegExMatch(hwId, "i)PID_?" . cleanPID) || (Format("{:04X}", dev.Pid) == cleanPID)
 
@@ -112,20 +111,18 @@ safeGetKeyboardId(AHI_Instance, vid, pid) {
     } catch {
         return 0
     }
-    return 0
+return 0
 }
 
 ; ----------------------------
 ; Functions
 ; ----------------------------
 
-; Track Esc state per device so combos only fire while Esc is held.
 handleEscapeState(state) {
     global escapeHeld
     escapeHeld := (state = 1)
 }
 
-; Trigger assigned action on F-key down only when Esc is held.
 handleEscFunctionCombo(actionName, state) {
     global escapeHeld
     if (state != 0 || !escapeHeld) {
@@ -141,7 +138,7 @@ configureTrayMenu() {
     Menu, Tray, NoStandard
 
     Menu, Tray, Add, Cycle Bank, TrayCycleBank
-    Menu, Tray, Add, Toggle Latch Mode, TrayToggleLatchMode
+    Menu, Tray, Add, Reset All Keys to Toggle Mode, TrayResetAllKeysToToggle
     Menu, Tray, Add, Reset Bank Latch States, TrayResetBankLatchStates
     Menu, Tray, Add, Toggle Latch OSD, TrayToggleLatchOSD
 
@@ -157,8 +154,8 @@ TrayCycleBank:
     cycleBank(0)
 Return
 
-TrayToggleLatchMode:
-    toggleLatchMode(0)
+TrayResetAllKeysToToggle:
+    resetAllKeysToToggle(0)
 Return
 
 TrayResetBankLatchStates:
@@ -181,7 +178,6 @@ TrayExit:
 ExitApp
 Return
 
-; Send a MIDI message
 sendMidiMessage(cc, val) {
     global midiOutHandle
     if (midiOutHandle) {
@@ -190,9 +186,8 @@ sendMidiMessage(cc, val) {
     }
 }
 
-; Handle physical key events and update latch state
 handleKeyEvent(keyIndex, keyState) {
-    global activeBank, latchStates, baseCC, keysPerBank, latchModeEnabled, physicalKeyStates, latchOSDVisible, latchRows
+    global activeBank, latchStates, momentaryModes, baseCC, keysPerBank, physicalKeyStates, latchOSDVisible, escapeHeld
 
     if (keyState = physicalKeyStates["K" keyIndex]) {
         return
@@ -201,13 +196,31 @@ handleKeyEvent(keyIndex, keyState) {
     physicalKeyStates["K" keyIndex] := keyState
     cc := baseCC + ((activeBank - 1) * keysPerBank) + (keyIndex - 1)
 
-    if (latchModeEnabled) {
+    ; --- ESC / F3 Combo Check ---
+    ; If Esc (F3) is held down, pressing a pad key toggles THAT pad's mode (Toggle <-> Momentary)
+    if (escapeHeld) {
+        if (keyState = 1) { ; On key down only
+            momentaryModes[cc] := !momentaryModes[cc]
+            showOSD(momentaryModes[cc] ? "M" : "T")
+            if (latchOSDVisible) {
+                showLatchOSD()
+            }
+        }
+        return
+    }
+
+    ; --- Standard Pad Execution ---
+    isMomentary := momentaryModes[cc]
+
+    if (isMomentary) {
+        ; Momentary mode: On when pressed (127), Off when released (0)
+        value := latchStates[cc] := (keyState = 1) ? 127 : 0
+    } else {
+        ; Toggle mode: Flip state on key down (1), ignore key up (0)
         if (keyState = 0) {
             return
         }
         value := latchStates[cc] := latchStates[cc] ? 0 : 127
-    } else {
-        value := latchStates[cc] := (keyState = 1) ? 127 : 0
     }
 
     sendMidiMessage(cc, value)
@@ -230,18 +243,27 @@ cycleBank(state) {
     showLatchOSD()
 }
 
-toggleLatchMode(state) {
-    global latchModeEnabled
+; Reset all keys in the current bank to standard Toggle mode
+resetAllKeysToToggle(state) {
+    global momentaryModes, baseCC, keysPerBank, activeBank, latchOSDVisible
     if (state != 0) {
         return
     }
-    latchModeEnabled := !latchModeEnabled
-    showOSD(latchModeEnabled ? "L" : "M")
-    showLatchOSD()
+
+    bankOffset := (activeBank - 1) * keysPerBank
+    Loop, %keysPerBank% {
+        cc := baseCC + bankOffset + (A_Index - 1)
+        momentaryModes[cc] := 0 ; Force all back to Toggle mode
+    }
+
+    showOSD("T") ; Shortened to single letter to fit standard OSD box
+    if (latchOSDVisible) {
+        showLatchOSD()
+    }
 }
 
 resetBankLatchStates(state) {
-    global latchStates, baseCC, keysPerBank, activeBank, latchOSDVisible, latchRows
+    global latchStates, baseCC, keysPerBank, activeBank, latchOSDVisible
     if (state != 0) {
         return
     }
@@ -272,7 +294,7 @@ toggleLatchOSD(state) {
 
 ; Render the latch OSD: simple black box, colored dots per key.
 showLatchOSD() {
-    global latchGuiHwnd, latchRows, baseCC, activeBank, keysPerBank, latchStates
+    global latchGuiHwnd, latchRows, baseCC, activeBank, keysPerBank, latchStates, momentaryModes
 
     rows := latchRows
     rows := rows > 0 ? rows : 1
@@ -291,7 +313,7 @@ showLatchOSD() {
     Gui, Latch:Color, 000000
 
     Gui, Latch:Font, s12, Segoe UI Semibold
-    statusText := "Bank: " activeBank " | Mode: " (latchModeEnabled ? "L" : "M")
+    statusText := "Bank: " activeBank
     Gui, Latch:Add, Text, x0 y6 w%width% h%statusHeight% cWhite Center, %statusText%
 
     Gui, Latch:Font, s14, Segoe UI Symbol
@@ -305,7 +327,18 @@ showLatchOSD() {
 
         cc := baseCC + ((activeBank - 1) * keysPerBank) + (idx - 1)
         isOn := (latchStates[cc] && latchStates[cc] != 0)
-        clr := (isOn ? "00FF00" : "FF0000")
+        isMomentary := momentaryModes[cc]
+
+        ; Color Logic:
+        ; Active / On  -> Green (00FF00)
+        ; Inactive     -> Yellow (FFFF00) if Momentary mode, Red (FF0000) if Toggle mode
+        if (isOn) {
+            clr := "00FF00"
+        } else if (isMomentary) {
+            clr := "FFFF00" ; Yellow for Momentary switches
+        } else {
+            clr := "FF0000" ; Red for standard Toggle switches
+        }
 
         Gui, Latch:Add, Text, x%x% y%y% w%dotSize% h%dotSize% hwndhCtrl c%clr% Center, %dot%
     }
@@ -315,7 +348,6 @@ showLatchOSD() {
     Gui, Latch:Show, x%xpos% y%ypos% w%width% h%height% NoActivate
 }
 
-; Brief center message OSD (small overlay)
 showOSD(val) {
     Gui, Msg:Default
     GuiControl,, MsgText, % val
@@ -327,7 +359,6 @@ HideMsgOSD:
     Gui, Msg:Hide
 Return
 
-; MIDI output device helper
 getMidiOutId(name) {
     numDevices := DllCall("winmm\midiOutGetNumDevs")
     Loop, %numDevices% {
