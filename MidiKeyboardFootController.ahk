@@ -113,6 +113,9 @@ subscribeDevice(deviceId) {
     for keyIndex, code in keyCodes {
         AHI.SubscribeKey(deviceId, code, true, Func("handleKeyEvent").Bind(keyIndex))
     }
+	
+	latchOSDVisible := 1
+    showLatchOSD()
 }
 
 unsubscribeDevice(deviceId) {
@@ -124,6 +127,9 @@ unsubscribeDevice(deviceId) {
     for keyIndex, code in keyCodes {
         AHI.UnsubscribeKey(deviceId, code)
     }
+	
+	latchOSDVisible := 0
+    Gui, Latch:Hide
 }
 
 ; ----------------------------
