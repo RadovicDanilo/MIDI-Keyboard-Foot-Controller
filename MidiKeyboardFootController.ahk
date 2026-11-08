@@ -106,7 +106,7 @@ subscribeDevice(deviceId) {
     ; Combo launcher keys: F3 (61) + F5..F8 (63..66).
     AHI.SubscribeKey(deviceId, 61, true, Func("handleEscapeState"))
     AHI.SubscribeKey(deviceId, 63, true, Func("handleEscFunctionCombo").Bind("cycleBank"))
-    AHI.SubscribeKey(deviceId, 64, true, Func("handleEscFunctionCombo").Bind("resetAllKeysToToggle"))
+	AHI.SubscribeKey(deviceId, 64, true, Func("handleEscFunctionCombo").Bind("toggleCurrentBankKeyModes"))
     AHI.SubscribeKey(deviceId, 65, true, Func("handleEscFunctionCombo").Bind("resetBankLatchStates"))
     AHI.SubscribeKey(deviceId, 66, true, Func("handleEscFunctionCombo").Bind("toggleLatchOSD"))
 
@@ -156,7 +156,7 @@ configureTrayMenu() {
     Menu, Tray, NoStandard
 
     Menu, Tray, Add, Cycle Bank, TrayCycleBank
-    Menu, Tray, Add, Reset All Keys to Toggle Mode, TrayResetAllKeysToToggle
+	Menu, Tray, Add, Toggle All Keys Between Toggle/Momentary Modes, TrayToggleCurrentBankKeyModes
     Menu, Tray, Add, Reset Bank Latch States, TrayResetBankLatchStates
     Menu, Tray, Add, Toggle Latch OSD, TrayToggleLatchOSD
 
@@ -172,8 +172,8 @@ TrayCycleBank:
     cycleBank(0)
 Return
 
-TrayResetAllKeysToToggle:
-    resetAllKeysToToggle(0)
+TrayToggleCurrentBankKeyModes:
+    toggleCurrentBankKeyModes(0)
 Return
 
 TrayResetBankLatchStates:
@@ -261,20 +261,38 @@ cycleBank(state) {
     showLatchOSD()
 }
 
-; Reset all keys in the current bank to standard Toggle mode
-resetAllKeysToToggle(state) {
+; Toggle all keys in the current bank between Toggle and Momentary modes.
+; If every key is currently in Toggle mode, switch all keys to Momentary.
+; If at least one key is in Momentary mode, switch all keys to Toggle.
+toggleCurrentBankKeyModes(state) {
     global momentaryModes, baseCC, keysPerBank, activeBank, latchOSDVisible
+
     if (state != 0) {
         return
     }
 
     bankOffset := (activeBank - 1) * keysPerBank
+
+    ; Check whether all keys in the current bank are in Toggle mode.
+    allToggle := true
     Loop, %keysPerBank% {
         cc := baseCC + bankOffset + (A_Index - 1)
-        momentaryModes[cc] := 0 ; Force all back to Toggle mode
+        if (momentaryModes[cc] != 0) {
+            allToggle := false
+            break
+        }
     }
 
-    showOSD("T") ; Shortened to single letter to fit standard OSD box
+    ; Switch all keys to the opposite mode.
+    newMode := allToggle ? 1 : 0
+
+    Loop, %keysPerBank% {
+        cc := baseCC + bankOffset + (A_Index - 1)
+        momentaryModes[cc] := newMode
+    }
+
+    showOSD(allToggle ? "M" : "T")
+
     if (latchOSDVisible) {
         showLatchOSD()
     }
